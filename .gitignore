@@ -5,3 +5,4 @@ ui/src/gql
 .env
 # Runtime files: TTS audio cache and recorded guardian replies.
 data
+.vercel

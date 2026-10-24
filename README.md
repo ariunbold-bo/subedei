@@ -159,12 +159,24 @@ npm run dev:ui     # http://localhost:3099/remoteEntry.js
 | `OYU_API_KEY`, `OYU_VOICE` | Oyu яриа: tsuurAI TTS (`female` / `mbspeech`), Anir STT. [`api/src/services/speech.ts`](api/src/services/speech.ts) |
 | `SMS_HTTP_URL`, `SMS_HTTP_TOKEN` | SMS gateway (`{to, text, from}` JSON). Хариу SMS-ийн webhook: `POST /api/sms/inbound {from, text}` |
 | `RING_TIMEOUT_SEC`, `PICKUP_GRACE_MIN`, `AUTO_PICKUP_CALLS` | Залгалтын дүрэм |
+| `CALL_PROVIDER` | `simulator` = browser утас (demo), `auto` = Twilio бүрэн тохируулсан бол жинхэнэ утас, үгүй бол симулятор |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY`, `TWILIO_API_SECRET`, `TWILIO_PHONE_NUMBER`, `TWILIO_TRIAL`, `PUBLIC_URL` | Жинхэнэ утас (Twilio). Доорх хэсгийг үзнэ үү |
 | `ERXES_ENABLED`, `REDIS_*`, `ERXES_USER_ID` | erxes холболт |
+
+### Жинхэнэ утас руу залгах (Twilio)
+
+Код бэлэн ([`services/twilio.ts`](api/src/services/twilio.ts), [`twilio-routes.ts`](api/src/twilio-routes.ts)). Систем Twilio REST-ээр дугаар руу залгана. Эцэг эх утсаа авахад Twilio манай `/twilio/voice` webhook-ээс TwiML авч, Oyu-ийн монгол дууг `<Play>`-ээр тоглуулна. Хариуг upgrade хийсэн аккаунт дээр `<Record>` + Oyu STT-ээр, trial аккаунт дээр товчлуураар (`<Gather>`) авна. Утсаа авахгүй, завгүй эсвэл алдаа гарвал `/twilio/status`-аар дараагийн асран хамгаалагч руу шилжинэ. Webhook бүр дуудлагын HMAC token-оор хамгаалагдсан.
+
+Шаардлага:
+- **Upgrade хийсэн Twilio аккаунт** болон Twilio-гийн дуудлага хийх дугаар (`TWILIO_PHONE_NUMBER`), Voice Geo Permissions дээр Mongolia идэвхтэй байх. Мөн `.env`-д `TWILIO_TRIAL=false`.
+- `PUBLIC_URL`: Twilio-д хүрэх энэ серверийн нийтийн https хаяг. Түүгээр зөвхөн `/twilio/*` болон `/media/audio/*` зам нээлттэй, консол болон бичлэгүүд гадагш гарахгүй.
+
+**Trial аккаунтын хязгаарлалт (туршиж батлагдсан):** trial-ийн гарах дуудлага зөвхөн Twilio-гийн өөрийн загвар холбоосыг ажиллуулдаг ([Twilio trial](https://www.twilio.com/docs/usage/trials/try-out-voice)). Манай дуудлага утсанд хүрсэн ч Twilio манай webhook руу хандаагүй. Тиймээс demo-г `CALL_PROVIDER=simulator`-оор browser утсаар үзүүлдэг.
 
 ## Шалгах
 
 ```bash
-npm test          # 34 тест: монгол хариу задлагч, Gemma хамгаалалт, залгалтын урсгал, сурагч/эцэг эхийн бүртгэл (MongoDB хэрэгтэй)
+npm test          # 44 тест: монгол хариу задлагч, AI хамгаалалт, залгалтын урсгал, Twilio webhook, сурагч/эцэг эхийн бүртгэл (MongoDB хэрэгтэй)
 npm run check     # API + erxes UI type-check
 npm run build     # API dist + ui/dist/remoteEntry.js
 ```
@@ -174,7 +186,7 @@ MongoDB хэрэгтэй тестүүд нь `TEST_MONGO_URL` өгвөл тэр 
 ## Одоогийн хязгаарлалт ба цаашдын төлөвлөгөө
 
 **Одоогийн байдал (шударгаар):**
-- **Утасны дуудлага** нь одоогоор browser дээрх утасны симулятороор явна. Жинхэнэ утасны сүлжээнд залгах бол SIP/Asterisk эсвэл erxes Calls-ыг `api/src/services/calls.ts`-ийн `ring()` дээр холбоно.
+- **Утасны дуудлага**: demo нь browser утасны симулятороор явна. Twilio-гоор жинхэнэ утас руу залгах код бэлэн. Trial аккаунтаар туршихад дуудлага утсанд хүрсэн ч trial дүрмийн улмаас Twilio манай webhook-ийг ажиллуулаагүй. Upgrade хийсэн аккаунт хэрэгтэй (дээрх "Жинхэнэ утас руу залгах" хэсгийг үзнэ үү).
 - **Oyu** TTS/STT-ийг жинхэнэ API дээр туршсан: TTS ойролцоогоор 1.7 секунд, STT ойролцоогоор 1 секунд. Синтетик дуун дээр STT "Болд" гэдгийг "бол", "эмээ нь" гэдгийг "энэ нь" гэж сонссон тохиолдол гарсан. Жинхэнэ хүний дуун дээр туршиж шалгах хэрэгтэй.
 - **AI**: урсгалыг `gemma3:1b` (локал) болон `oyuLLM` дээр туршсан. `gemma4` model локалд татагдаагүй байсан. Жижиг model тоо буруу тоолох зэрэг алдаа гаргадаг тул тодорхой тоо, хүний нэрийг дүрмийн задлагч давхар шалгана.
 - **erxes**: plugin build хийгдэж, subgraph ажиллаж байна. Жинхэнэ erxes stack дээр gateway бүртгэл болон Contacts синкийг ментортой хамт шалгах шаардлагатай.

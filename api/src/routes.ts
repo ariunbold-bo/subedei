@@ -329,8 +329,10 @@ export const createRestRouter = () => {
     res.json({ guardianIds: await moveGuardian(param(req, "id"), param(req, "guardianId"), body.direction) });
   });
 
+  // No defaults in a partial update: changing only the phone must keep the relation.
+  const guardianPatch = guardianInput.extend({ relation: z.string().max(30) }).partial();
   api.patch("/guardians/:id", async (req, res) => {
-    res.json(await updateGuardian(param(req, "id"), guardianInput.partial().parse(req.body)));
+    res.json(await updateGuardian(param(req, "id"), guardianPatch.parse(req.body)));
   });
 
   api.post("/roster/import", async (req, res) => {

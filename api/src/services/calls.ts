@@ -101,6 +101,39 @@ const confirmationFor = (intent: Intent) => {
   }
 };
 
+// Keypad answers for real phone calls (Twilio trial accounts cannot record).
+type KeyOption = { label: string; intent: Omit<Intent, "engine"> };
+
+const KEYPAD: Record<Purpose, { prompt: string; keys: Record<string, KeyOption> }> = {
+  late_pickup: {
+    prompt:
+      "15 минутын дотор ирэх бол 1, 30 минутын дотор ирэх бол 2, өөр хүн авах бол 3, ирж чадахгүй бол 4-ийг дарна уу.",
+    keys: {
+      "1": { label: "15 минутын дотор ирнэ", intent: { outcome: "coming", etaMinutes: 15, summary: "15 минутын дотор ирнэ (товч 1)" } },
+      "2": { label: "30 минутын дотор ирнэ", intent: { outcome: "coming", etaMinutes: 30, summary: "30 минутын дотор ирнэ (товч 2)" } },
+      "3": { label: "Өөр хүн авна", intent: { outcome: "someone_else", pickupPerson: "өөр хүн", summary: "Өөр хүн авахаар ирнэ (товч 3)" } },
+      "4": { label: "Ирж чадахгүй", intent: { outcome: "cannot_come", summary: "Ирж чадахгүй (товч 4)" } },
+    },
+  },
+  absence: {
+    prompt: "Өвчтэй бол 1, хоцорч ирэх бол 2, өөр шалтгаантай бол 3-ыг дарна уу.",
+    keys: {
+      "1": { label: "Өвчтэй", intent: { outcome: "absent_reason", reason: "Өвчтэй", summary: "Өвчтэй (товч 1)" } },
+      "2": { label: "Хоцорч ирнэ", intent: { outcome: "coming", summary: "Хоцорч ирнэ (товч 2)" } },
+      "3": { label: "Өөр шалтгаан", intent: { outcome: "absent_reason", reason: "Өөр шалтгаан", summary: "Өөр шалтгаантай (товч 3)" } },
+    },
+  },
+  meeting: {
+    prompt: "Хуралд ирэх бол 1, ирэхгүй бол 2-ыг дарна уу.",
+    keys: {
+      "1": { label: "Ирнэ", intent: { outcome: "attending", summary: "Хуралд ирнэ (товч 1)" } },
+      "2": { label: "Ирэхгүй", intent: { outcome: "not_attending", summary: "Хуралд ирэхгүй (товч 2)" } },
+    },
+  },
+};
+
+export const keypadPrompt = (purpose: Purpose) => KEYPAD[purpose].prompt;
+
 const loadContext = async (flow: CallFlowDoc, guardian: GuardianDoc): Promise<ScriptContext & { teacher: string }> => {
   const student = flow.studentId ? await Students.findById(flow.studentId).lean<StudentDoc>() : null;
   const meeting = flow.meetingId ? await Meetings.findById(flow.meetingId).lean<MeetingDoc>() : null;
@@ -195,6 +228,8 @@ const ring = async (flow: CallFlowDoc) => {
 
   if (callProvider() === "twilio") {
     try {
+      // Warm the TTS cache: Twilio trial webhooks must answer within 5 seconds.
+      if (env.TWILIO_TRIAL) await synthesize(keypadPrompt(flow.purpose));
       const twilioSid = await placeCall(String(call._id), guardian.phone);
       await Calls.updateOne({ _id: call._id }, { channel: "twilio", twilioSid });
       notifyConsole("call", { _id: call._id, status: call.status, channel: "twilio" });
@@ -321,6 +356,18 @@ export const replyToCall = async (callId: string, { text, audio, contentType, re
   });
 
   return completeCall(call, transcript, intent, recordingUrl);
+};
+
+/** A keypad answer from a real phone call ("1" = coming in 15 minutes, …). */
+export const replyWithKeypad = async (callId: string, digits: string) => {
+  const call = await Calls.findOne({ _id: callId, status: "answered" }).lean<CallDoc>();
+  if (!call) throw conflict("Хариу хүлээж буй дуудлага олдсонгүй");
+  const key = digits.trim().charAt(0);
+  const option = KEYPAD[call.purpose].keys[key];
+  const intent: Intent = option
+    ? { ...option.intent, engine: "rules" }
+    : { outcome: "unknown", summary: `Тодорхойгүй товч: ${digits}`, engine: "rules" };
+  return completeCall(call, `Товч ${key}${option ? ` — ${option.label}` : ""}`, intent);
 };
 
 const completeCall = async (call: CallDoc, transcript: string, intent: Intent, recordingUrl?: string) => {

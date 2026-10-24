@@ -89,6 +89,11 @@ const envSchema = z.object({
   TWILIO_API_SECRET: optional,
   TWILIO_AUTH_TOKEN: optional,
   TWILIO_PHONE_NUMBER: optional,
+  // Trial accounts: only To/Url/StatusCallback on the REST call, no <Record>;
+  // guardians answer with the keypad (<Gather>). Set false after upgrading.
+  TWILIO_TRIAL: flag(true),
+  // e.g. "mn-MN": also accept spoken answers through <Gather input="speech">.
+  TWILIO_SPEECH_LANGUAGE: optional,
   // Added to 8-digit local numbers when dialing (+976 = Mongolia).
   PHONE_COUNTRY_CODE: z.string().default("976"),
 

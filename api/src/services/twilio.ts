@@ -18,7 +18,8 @@ export const twilioProblems = () => {
   if (!(env.TWILIO_API_KEY && env.TWILIO_API_SECRET) && !env.TWILIO_AUTH_TOKEN) {
     problems.push("TWILIO_API_KEY + TWILIO_API_SECRET (эсвэл TWILIO_AUTH_TOKEN) хоосон");
   }
-  if (!env.TWILIO_PHONE_NUMBER) problems.push("TWILIO_PHONE_NUMBER хоосон");
+  // Trial calls go out from Twilio's shared trial number, so no From is needed.
+  if (!env.TWILIO_TRIAL && !env.TWILIO_PHONE_NUMBER) problems.push("TWILIO_PHONE_NUMBER хоосон");
   if (!env.PUBLIC_URL) problems.push("PUBLIC_URL (tunnel-ийн https хаяг) хоосон");
   return problems;
 };
@@ -30,7 +31,8 @@ export const callStatus = () => ({
   provider: callProvider(),
   requested: env.CALL_PROVIDER,
   problems: env.CALL_PROVIDER === "simulator" ? [] : twilioProblems(),
-  from: env.TWILIO_PHONE_NUMBER ?? null,
+  from: env.TWILIO_TRIAL ? "Twilio trial" : (env.TWILIO_PHONE_NUMBER ?? null),
+  trial: env.TWILIO_TRIAL,
 });
 
 const authorization = () => {
@@ -60,7 +62,7 @@ export const verifyWebhook = (callId: string, token: string) => {
 
 export const publicUrl = (path: string) => `${(env.PUBLIC_URL ?? "").replace(/\/+$/, "")}${path}`;
 
-const webhookUrl = (kind: "voice" | "status" | "recording" | "no-reply", callId: string) =>
+const webhookUrl = (kind: "voice" | "status" | "recording" | "gather" | "no-reply", callId: string) =>
   publicUrl(`/twilio/${kind}?callId=${callId}&token=${webhookToken(callId)}`);
 
 type TwilioError = { code?: number; message?: string; more_info?: string };
@@ -79,6 +81,18 @@ const twilioRequest = async (path: string, form: URLSearchParams) => {
 
 /** Dials the guardian; returns the Twilio call SID. */
 export const placeCall = async (callId: string, phone: string) => {
+  if (env.TWILIO_TRIAL) {
+    // Trial accounts reject every other parameter ("limited parameter access").
+    const form = new URLSearchParams({
+      To: toE164(phone),
+      Url: webhookUrl("voice", callId),
+      StatusCallback: webhookUrl("status", callId),
+    });
+    const call = await twilioRequest("/Calls.json", form);
+    if (!call.sid) throw new Error("Twilio returned no call SID");
+    return call.sid;
+  }
+
   const form = new URLSearchParams({
     To: toE164(phone),
     From: env.TWILIO_PHONE_NUMBER ?? "",
@@ -129,6 +143,18 @@ export const speak = (audioUrl: string | null | undefined, text: string) =>
 
 export const recordReply = (callId: string) =>
   `<Record action="${xml(webhookUrl("recording", callId))}" method="POST" maxLength="20" timeout="3" playBeep="true" trim="trim-silence"/>`;
+
+/**
+ * Keypad (and optionally speech) answer — works on trial accounts, where
+ * <Record> is blocked. The prompts play inside <Gather> so a key can be
+ * pressed while they are still speaking.
+ */
+export const gatherReply = (callId: string, prompts: string) => {
+  const speech = env.TWILIO_SPEECH_LANGUAGE
+    ? ` input="dtmf speech" language="${xml(env.TWILIO_SPEECH_LANGUAGE)}" speechTimeout="auto"`
+    : ` input="dtmf"`;
+  return `<Gather${speech} numDigits="1" timeout="7" action="${xml(webhookUrl("gather", callId))}" method="POST">${prompts}</Gather>`;
+};
 
 export const redirectNoReply = (callId: string) => `<Redirect method="POST">${xml(webhookUrl("no-reply", callId))}</Redirect>`;
 

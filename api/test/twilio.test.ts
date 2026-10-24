@@ -13,6 +13,7 @@ process.env.DATA_DIR = dataDir;
 process.env.LLM_ENABLED = "false";
 process.env.AUTO_PICKUP_CALLS = "false";
 process.env.CALL_PROVIDER = "twilio";
+process.env.TWILIO_TRIAL = "false"; // upgraded account: recording + Oyu STT (trial: twilio-trial.test.ts)
 process.env.PUBLIC_URL = "https://subedei.example.test";
 process.env.TWILIO_ACCOUNT_SID = "AC00000000000000000000000000000000";
 process.env.TWILIO_API_KEY = "SK00000000000000000000000000000000";

@@ -1,16 +1,20 @@
 import express, { type NextFunction, type Request, type Response, Router } from "express";
+import { env } from "./config.ts";
 import { Calls } from "./models.ts";
-import { answerCall, markUnanswered, replyToCall } from "./services/calls.ts";
-import { saveRecording } from "./services/speech.ts";
+import { answerCall, keypadPrompt, markUnanswered, replyToCall, replyWithKeypad } from "./services/calls.ts";
+import { saveRecording, synthesize } from "./services/speech.ts";
 import {
   HANGUP,
   downloadRecording,
+  gatherReply,
   recordReply,
   redirectNoReply,
   speak,
   twiml,
   verifyWebhook,
 } from "./services/twilio.ts";
+
+const THANKS = "Баярлалаа. Таны хариуг багшид дамжууллаа.";
 
 // Twilio webhooks. Each URL carries ?callId=…&token=… (HMAC of the call id);
 // requests without a valid token are rejected.
@@ -45,14 +49,44 @@ export const createTwilioRouter = () => {
   const router = Router();
   router.use(express.urlencoded({ extended: false }));
 
-  // The guardian picked up: play the school's message, then record the answer.
+  // The guardian picked up: play the school's message, then collect the answer —
+  // keypad on trial accounts (<Record> is blocked there), a recording otherwise.
   router.post("/voice", async (req, res) => {
     const callId = callIdOf(req);
     try {
       const call = await answerCall(callId);
-      sendTwiml(res, twiml(speak(call.audioUrl, call.script), recordReply(callId), redirectNoReply(callId)));
+      const message = speak(call.audioUrl, call.script);
+      if (env.TWILIO_TRIAL) {
+        const prompt = keypadPrompt(call.purpose);
+        const menu = speak(await synthesize(prompt), prompt);
+        sendTwiml(res, twiml(gatherReply(callId, message + menu), redirectNoReply(callId)));
+      } else {
+        sendTwiml(res, twiml(message, recordReply(callId), redirectNoReply(callId)));
+      }
     } catch {
       sendTwiml(res, twiml(HANGUP));
+    }
+  });
+
+  // Keypad digits (or Twilio speech text) from <Gather>.
+  router.post("/gather", async (req, res) => {
+    const callId = callIdOf(req);
+    const digits = String(req.body.Digits ?? "").trim();
+    const speech = String(req.body.SpeechResult ?? "").trim();
+    try {
+      if (digits) {
+        const done = await replyWithKeypad(callId, digits);
+        sendTwiml(res, twiml(speak(done.confirmationAudioUrl, done.confirmation ?? THANKS), HANGUP));
+      } else if (speech) {
+        // The LLM + TTS can exceed the trial 5-second webhook limit: thank now, think after.
+        sendTwiml(res, twiml(speak(await synthesize(THANKS), THANKS), HANGUP));
+        void replyToCall(callId, { text: speech }).catch((e) => console.warn("[twilio] speech:", e.message));
+      } else {
+        await finish(res, callId, { text: "" });
+      }
+    } catch (error) {
+      console.warn("[twilio] gather:", (error as Error).message);
+      if (!res.headersSent) sendTwiml(res, twiml(HANGUP));
     }
   });
 

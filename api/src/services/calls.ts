@@ -22,15 +22,18 @@ import { notifyConsole, notifyPhone } from "./events.ts";
 import { type Intent, interpretReply } from "./intent.ts";
 import { sendSms } from "./sms.ts";
 import { synthesize, transcribe } from "./speech.ts";
+import { callProvider, hangupCall, placeCall } from "./twilio.ts";
 
 // Call orchestration. A flow calls the guardians of a child one by one:
-// ring -> (answered -> spoken script -> guardian reply -> Gemma intent)
+// ring -> (answered -> spoken script -> guardian reply -> LLM intent)
 //      -> (no answer / declined -> next guardian) -> nobody reached -> SMS.
 //
-// Telephony: calls are delivered to the browser phone simulator over SSE
-// (`incoming_call`). A real carrier (SIP/Asterisk, erxes Calls, Twilio…) plugs
-// in at `ring()`: dial the number, play `audioUrl`, record the reply and POST
-// it to /api/calls/:id/reply.
+// Telephony: with Twilio configured, `ring()` dials the real phone and the
+// webhooks in twilio-routes.ts drive the call. Otherwise (or if dialing fails)
+// the call goes to the browser phone simulator over SSE (`incoming_call`).
+
+/** Extra seconds a Twilio call may ring before we time it out ourselves (Twilio reports it first). */
+const TWILIO_RING_GRACE_SEC = 45;
 
 const studentName = (student: Pick<StudentDoc, "firstName">) => student.firstName;
 
@@ -190,6 +193,20 @@ const ring = async (flow: CallFlowDoc) => {
     ringingAt: new Date(),
   });
 
+  if (callProvider() === "twilio") {
+    try {
+      const twilioSid = await placeCall(String(call._id), guardian.phone);
+      await Calls.updateOne({ _id: call._id }, { channel: "twilio", twilioSid });
+      notifyConsole("call", { _id: call._id, status: call.status, channel: "twilio" });
+      return call;
+    } catch (error) {
+      // e.g. an unverified number on a Twilio trial account: keep the demo going.
+      const providerError = (error as Error).message;
+      console.warn("[twilio] dial failed, using the phone simulator:", providerError);
+      await Calls.updateOne({ _id: call._id }, { providerError });
+    }
+  }
+
   notifyPhone(guardian._id, "incoming_call", {
     callId: call._id,
     from: `${env.SCHOOL_NAME}${context.classroomName ? ` · ${context.classroomName}` : ""}`,
@@ -250,6 +267,7 @@ const endUnanswered = async (callId: string | Types.ObjectId, status: "no_answer
     { new: true },
   ).lean<CallDoc>();
   if (!call) return null;
+  if (call.twilioSid) void hangupCall(call.twilioSid);
   notifyPhone(call.guardianId, "call_ended", { callId: call._id, status });
   notifyConsole("call", { _id: call._id, status });
   await advance(call.flowId);
@@ -257,6 +275,9 @@ const endUnanswered = async (callId: string | Types.ObjectId, status: "no_answer
 };
 
 export const declineCall = (callId: string) => endUnanswered(callId, "declined");
+
+/** Twilio reported no-answer/busy/failed: try the next guardian. */
+export const markUnanswered = endUnanswered;
 
 /** Guardian picked up: returns what to play. */
 export const answerCall = async (callId: string) => {
@@ -496,6 +517,7 @@ export const cancelFlowsForStudent = async (studentId: string | Types.ObjectId, 
     const ringing = await Calls.find({ flowId: flow._id, status: "ringing" }).lean<CallDoc[]>();
     for (const call of ringing) {
       await Calls.updateOne({ _id: call._id }, { status: "cancelled", endedAt: new Date() });
+      if (call.twilioSid) void hangupCall(call.twilioSid);
       notifyPhone(call.guardianId, "call_ended", { callId: call._id, status: "cancelled" });
     }
   }
@@ -503,9 +525,13 @@ export const cancelFlowsForStudent = async (studentId: string | Types.ObjectId, 
 
 /** Times out unanswered and silent calls; driven by the scheduler. */
 export const checkCallTimeouts = async (now = new Date()) => {
-  const ringDeadline = new Date(now.getTime() - env.RING_TIMEOUT_SEC * 1000);
-  const ringing = await Calls.find({ status: "ringing", ringingAt: { $lt: ringDeadline } }).lean<CallDoc[]>();
-  for (const call of ringing) await endUnanswered(call._id, "no_answer");
+  const ringDeadline = now.getTime() - env.RING_TIMEOUT_SEC * 1000;
+  const ringing = await Calls.find({ status: "ringing", ringingAt: { $lt: new Date(ringDeadline) } }).lean<CallDoc[]>();
+  for (const call of ringing) {
+    // Twilio calls take time to connect and report their own no-answer.
+    const grace = call.channel === "twilio" ? TWILIO_RING_GRACE_SEC * 1000 : 0;
+    if (call.ringingAt.getTime() < ringDeadline - grace) await endUnanswered(call._id, "no_answer");
+  }
 
   const replyDeadline = new Date(now.getTime() - env.REPLY_TIMEOUT_SEC * 1000);
   const silent = await Calls.find({ status: "answered", answeredAt: { $lt: replyDeadline } }).lean<CallDoc[]>();

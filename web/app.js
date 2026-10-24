@@ -86,7 +86,12 @@ const renderChips = () => {
     [`AI: ${modelLabel(s.llm.model)}`, llmOn ? "true" : s.llm.reachable ? "warn" : "false", llmOn ? `${s.llm.model} ажиллаж байна` : "AI холбогдоогүй — дүрмийн задлагч ажиллана"],
     [`TTS: ${s.speech.tts === "oyu" ? "Oyu" : "browser"}`, s.speech.tts === "oyu" ? "true" : "warn", "Монгол яриа үүсгэгч"],
     [`STT: ${s.speech.stt === "oyu" ? "Oyu" : "browser"}`, s.speech.stt === "oyu" ? "true" : "warn", "Яриа танигч"],
-    [`SMS: ${s.sms.provider === "http" ? "gateway" : "simulator"}`, s.sms.provider === "http" ? "true" : "warn", "SMS илгээгч"],
+    [
+      `Утас: ${s.calls.provider === "twilio" ? "Twilio" : "симулятор"}`,
+      s.calls.provider === "twilio" ? "true" : "warn",
+      s.calls.provider === "twilio" ? `Жинхэнэ утас руу ${s.calls.from}-оос залгана` : s.calls.problems.join("; ") || "Browser утасны симулятор",
+    ],
+    [`SMS:${s.sms.provider === "http" ? "gateway" : "simulator"}`, s.sms.provider === "http" ? "true" : "warn", "SMS илгээгч"],
     [`erxes: ${s.erxes.enabled ? "холбогдсон" : "standalone"}`, s.erxes.enabled ? "true" : "warn", "erxes gateway + Contacts"],
   ];
   $("#chips").innerHTML = chips

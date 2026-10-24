@@ -14,6 +14,8 @@ import { createRestRouter } from "./routes.ts";
 import { seedDemo } from "./seed.ts";
 import { startScheduler, stopScheduler } from "./services/scheduler.ts";
 import { DATA_DIR } from "./services/speech.ts";
+import { callStatus } from "./services/twilio.ts";
+import { createTwilioRouter } from "./twilio-routes.ts";
 
 const WEB_DIR = fileURLToPath(new URL("../../web/", import.meta.url));
 
@@ -26,6 +28,19 @@ if (seeded.seeded) console.log("Seeded the demo class (2б)");
 
 const app = express();
 app.disable("x-powered-by");
+
+// The public tunnel (PUBLIC_URL) exists for Twilio only: through it, serve the
+// webhooks and the synthesized audio Twilio plays — never the teacher console,
+// the API or recorded replies.
+const publicHost = env.PUBLIC_URL ? new URL(env.PUBLIC_URL).hostname : undefined;
+app.use((req, res, next) => {
+  const viaTunnel = Boolean(req.headers["cf-connecting-ip"]) || (publicHost !== undefined && req.hostname === publicHost);
+  if (!viaTunnel || req.path.startsWith("/twilio/") || req.path.startsWith("/media/audio/")) {
+    next();
+    return;
+  }
+  res.status(404).end();
+});
 
 const httpServer = createServer(app);
 
@@ -47,6 +62,7 @@ app.use(
 
 // Standalone web console (teacher) and phone simulator (guardian).
 app.use("/api", createRestRouter());
+app.use("/twilio", createTwilioRouter());
 app.use("/media", express.static(DATA_DIR, { fallthrough: false }));
 app.use(express.static(WEB_DIR));
 
@@ -56,6 +72,13 @@ console.log(`${manifest.name} phone:     http://localhost:${env.PORT}/phone.html
 console.log(`${manifest.name} GraphQL:   http://localhost:${env.PORT}${manifest.api.graphql}`);
 
 startScheduler();
+
+const calls = callStatus();
+console.log(
+  calls.provider === "twilio"
+    ? `calls: Twilio from ${calls.from}, webhooks at ${env.PUBLIC_URL}/twilio`
+    : `calls: phone simulator${calls.problems.length ? ` (Twilio: ${calls.problems.join("; ")})` : ""}`,
+);
 
 if (env.ERXES_ENABLED) {
   try {

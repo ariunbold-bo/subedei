@@ -8,7 +8,9 @@ import { env } from "../config.ts";
 //   STT (Anir):    POST /v1/audio/transcriptions multipart file (WAV/MP3/OGG) -> {"text": "..."}
 // Without a key the phone page speaks and listens with the browser's Web Speech API.
 
-export const DATA_DIR = fileURLToPath(new URL("../../../data/", import.meta.url));
+export const DATA_DIR = env.DATA_DIR
+  ? `${env.DATA_DIR.replace(/[\\/]+$/, "")}/`
+  : fileURLToPath(new URL("../../../data/", import.meta.url));
 const AUDIO_DIR = `${DATA_DIR}audio/`;
 const RECORDINGS_DIR = `${DATA_DIR}recordings/`;
 const TTS_MAX_CHARS = 800;

@@ -48,6 +48,7 @@ import {
 } from "./services/roster.ts";
 import { sendBulkSms, smsStatus } from "./services/sms.ts";
 import { saveRecording, speechStatus } from "./services/speech.ts";
+import { callStatus } from "./services/twilio.ts";
 import { parseHHmm } from "./time.ts";
 
 const objectId = z.string().regex(/^[a-f\d]{24}$/i, "Буруу ID");
@@ -68,6 +69,7 @@ export const statusPayload = async () => ({
   timezone: env.TIMEZONE,
   llm: await llmStatus(),
   speech: speechStatus(),
+  calls: callStatus(),
   sms: smsStatus(),
   erxes: erxesStatus(),
   ringTimeoutSec: env.RING_TIMEOUT_SEC,

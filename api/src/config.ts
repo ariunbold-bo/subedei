@@ -40,6 +40,8 @@ const envSchema = z.object({
   MONGO_URL: z.string().default("mongodb://127.0.0.1:27017/subedei"),
   // Start an in-memory MongoDB instead of MONGO_URL (demo without installing Mongo).
   MONGO_MEMORY: flag(false),
+  // Synthesized audio cache and recorded replies (default: <repo>/data).
+  DATA_DIR: optional,
   UI_ENTRY_URL: optional,
   LOAD_BALANCER_ADDRESS: optional,
   RELEASE_VERSION: optional,
@@ -76,6 +78,19 @@ const envSchema = z.object({
   OYU_VOICE: z.string().default("female"),
   // Anir model, e.g. "v4"; unset = Oyu's default.
   OYU_STT_MODEL: optional,
+
+  // Phone calls: "auto" = Twilio when fully configured, otherwise the browser
+  // phone simulator. Twilio reaches this server through PUBLIC_URL (a tunnel).
+  CALL_PROVIDER: z.enum(["auto", "simulator", "twilio"]).default("auto"),
+  PUBLIC_URL: optional,
+  TWILIO_ACCOUNT_SID: optional,
+  // Either an API key (SK…) + secret, or the account auth token.
+  TWILIO_API_KEY: optional,
+  TWILIO_API_SECRET: optional,
+  TWILIO_AUTH_TOKEN: optional,
+  TWILIO_PHONE_NUMBER: optional,
+  // Added to 8-digit local numbers when dialing (+976 = Mongolia).
+  PHONE_COUNTRY_CODE: z.string().default("976"),
 
   // SMS gateway. Unset = simulator (messages appear on the phone page).
   SMS_HTTP_URL: optional,

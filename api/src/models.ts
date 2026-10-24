@@ -136,6 +136,11 @@ const callSchema = new Schema(
     confirmation: { type: String },
     confirmationAudioUrl: { type: String },
     intent: { type: intentSchema },
+    // Where the call actually rang: a real phone (Twilio) or the browser simulator.
+    channel: { type: String, enum: ["simulator", "twilio"], default: "simulator" },
+    twilioSid: { type: String },
+    // Why dialing a real phone failed (the call then rang in the simulator).
+    providerError: { type: String },
   },
   { timestamps: true },
 );

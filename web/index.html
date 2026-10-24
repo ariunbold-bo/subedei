@@ -8,23 +8,48 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header class="topbar">
-      <div class="brand">
-        <span class="brand-mark" aria-hidden="true">С</span>
-        <span>Сүбэдэй <small id="school-line">Багшийн автомат туслах</small></span>
+    <!-- Login overlay — shown until authenticated -->
+    <div id="login-overlay" class="login-overlay" role="dialog" aria-modal="true" aria-label="Нэвтрэх">
+      <div class="login-card">
+        <div class="login-brand">
+          <span class="brand-mark" aria-hidden="true">С</span>
+          <span>Сүбэдэй</span>
+        </div>
+        <p class="login-sub">Системд нэвтрэх</p>
+        <form id="login-form" class="login-form" autocomplete="on" novalidate>
+          <div class="login-field">
+            <label for="login-username">Нэвтрэх нэр</label>
+            <input id="login-username" name="username" type="text" autocomplete="username" required autofocus />
+          </div>
+          <div class="login-field">
+            <label for="login-password">Нууц үг</label>
+            <input id="login-password" name="password" type="password" autocomplete="current-password" required />
+          </div>
+          <p id="login-error" class="login-error" role="alert" hidden></p>
+          <button class="btn primary login-submit" type="submit">Нэвтрэх</button>
+        </form>
       </div>
-      <div class="chips" id="chips" aria-label="Холболтын төлөв"></div>
-      <a class="btn small" href="phone.html" target="_blank" rel="noopener">📱 Эцэг эхийн утас</a>
-    </header>
+    </div>
 
-    <nav class="tabs" role="tablist">
-      <button role="tab" data-tab="today" aria-selected="true">Өнөөдөр</button>
-      <button role="tab" data-tab="calls">Дуудлага</button>
-      <button role="tab" data-tab="sms">SMS</button>
-      <button role="tab" data-tab="meetings">Хурал</button>
-      <button role="tab" data-tab="roster">Сурагчид</button>
-      <button role="tab" data-tab="settings">Тохиргоо</button>
-    </nav>
+    <div id="app-shell" class="app-shell" hidden>
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">С</span>
+          <span>Сүбэдэй <small id="school-line">Багшийн автомат туслах</small></span>
+        </div>
+        <div class="chips" id="chips" aria-label="Холболтын төлөв"></div>
+        <a class="btn small" href="phone.html" target="_blank" rel="noopener">📱 Эцэг эхийн утас</a>
+        <button class="btn small" id="logout-btn" title="Гарах">⬡ Гарах</button>
+      </header>
+
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="today" aria-selected="true">Өнөөдөр</button>
+        <button role="tab" data-tab="calls">Дуудлага</button>
+        <button role="tab" data-tab="sms">SMS</button>
+        <button role="tab" data-tab="meetings">Хурал</button>
+        <button role="tab" data-tab="roster">Сурагчид</button>
+        <button role="tab" data-tab="settings">Тохиргоо</button>
+      </nav>
 
     <main>
       <section data-panel="today">
@@ -208,6 +233,7 @@
         </div>
       </section>
     </main>
+    </div><!-- /#app-shell -->
 
     <script type="module" src="app.js"></script>
   </body>

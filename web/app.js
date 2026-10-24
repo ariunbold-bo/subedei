@@ -15,10 +15,55 @@ import {
   toast,
 } from "./common.js";
 
+// ---- Auth --------------------------------------------------------------
+const AUTH_KEY = "subedei:authed";
+const CREDENTIALS = { username: "bagsh", password: "bagsh123" };
+
+const loginOverlay = document.getElementById("login-overlay");
+const appShell = document.getElementById("app-shell");
+const loginForm = document.getElementById("login-form");
+const loginError = document.getElementById("login-error");
+
+const showApp = () => {
+  loginOverlay.classList.add("login-overlay--out");
+  loginOverlay.addEventListener("animationend", () => loginOverlay.remove(), { once: true });
+  appShell.hidden = false;
+};
+
+const showError = (msg) => {
+  loginError.textContent = msg;
+  loginError.hidden = false;
+  document.getElementById("login-password").value = "";
+  document.getElementById("login-password").focus();
+};
+
+if (sessionStorage.getItem(AUTH_KEY) === "1") {
+  // Already authenticated this session — skip login screen immediately.
+  showApp();
+} else {
+  // Show login; block app init until success.
+  loginForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const username = document.getElementById("login-username").value.trim();
+    const password = document.getElementById("login-password").value;
+    if (username === CREDENTIALS.username && password === CREDENTIALS.password) {
+      sessionStorage.setItem(AUTH_KEY, "1");
+      showApp();
+    } else {
+      showError("Нэвтрэх нэр эсвэл нууц үг буруу байна.");
+    }
+  });
+}
+
+document.getElementById("logout-btn").addEventListener("click", () => {
+  sessionStorage.removeItem(AUTH_KEY);
+  location.reload();
+});
+
+// ---- Tabs --------------------------------------------------------------
 const state = { status: null, today: null, calls: [], sms: [], meetings: [], guardians: [], tab: "today" };
 const $ = (selector) => document.querySelector(selector);
 
-// ---- Tabs --------------------------------------------------------------
 document.querySelectorAll("[data-tab]").forEach((button) =>
   button.addEventListener("click", () => showTab(button.dataset.tab)),
 );
@@ -26,7 +71,16 @@ document.querySelectorAll("[data-tab]").forEach((button) =>
 const showTab = (tab) => {
   state.tab = tab;
   document.querySelectorAll("[data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
-  document.querySelectorAll("[data-panel]").forEach((p) => p.classList.toggle("hidden", p.dataset.panel !== tab));
+  document.querySelectorAll("[data-panel]").forEach((p) => {
+    const isTarget = p.dataset.panel === tab;
+    if (isTarget) {
+      p.classList.remove("hidden");
+      p.classList.add("panel--slide");
+      p.addEventListener("animationend", () => p.classList.remove("panel--slide"), { once: true });
+    } else {
+      p.classList.add("hidden");
+    }
+  });
   try {
     localStorage.setItem("subedei.tab", tab);
   } catch {}
